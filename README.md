@@ -42,9 +42,6 @@ An interactive, multilingual data analysis webapp powered by **Streamlit** and i
 
 The app includes a **basic login system** with a limited set of predefined users for demonstration purposes.
 
-> 🚨 For production use, it is strongly recommended to implement a secure authentication mechanism (e.g., OAuth, hashed credentials).
-
-
 ---
 
 ## 🙌 Acknowledgements
