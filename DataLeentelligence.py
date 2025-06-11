@@ -331,8 +331,9 @@ if st.session_state.user_tier in ['admin', 'tier2'] and 'tab2' in locals():
             # AI Data Quality Assessment
             with st.expander("Data Quality Report"):
                 if st.button("Generate Quality Report"):
+                    sample_data = df.head(50).to_csv(index=False)
                     quality_prompt = f"""Analyze this dataset for quality issues:
-{df.head(50).to_csv(index=False)}
+{sample_data}
 
 Provide a detailed report on:
 1. Missing values per column
