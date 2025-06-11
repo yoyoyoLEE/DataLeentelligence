@@ -265,9 +265,13 @@ Concentrati sulla sintesi di questi tre elementi in un abstract coerente."""
            - Non-parametric tests
            - Time series analysis
            - Multivariate analysis
-        2. Generate executable Python code to perform the analysis
-        3. Explain the results and their interpretation
-        4. Include assumptions checking and post-hoc tests when appropriate
+        2. Explain the results and their interpretation
+        3. Include assumptions checking and post-hoc tests when appropriate
+        
+        IMPORTANT: 
+        - Do NOT include any Python code in your response
+        - Only provide the analysis results and explanations
+        - Use clear, non-technical language suitable for non-programmers
         
         Always respond in proper English with clear structure. Use formal but understandable language.""" if st.session_state.language == 'english' else """Sei un assistente AI esperto in analisi dati completa e redazione scientifica.
         Quando viene richiesta un'analisi statistica:
@@ -279,9 +283,13 @@ Concentrati sulla sintesi di questi tre elementi in un abstract coerente."""
            - Test non parametrici
            - Analisi di serie temporali
            - Analisi multivariata
-        2. Genera codice Python eseguibile per l'analisi
-        3. Spiega i risultati e la loro interpretazione
-        4. Includi verifica delle assunzioni e test post-hoc quando appropriato
+        2. Spiega i risultati e la loro interpretazione
+        3. Includi verifica delle assunzioni e test post-hoc quando appropriato
+        
+        IMPORTANTE:
+        - NON includere codice Python nella risposta
+        - Fornisci solo i risultati dell'analisi e le spiegazioni
+        - Usa un linguaggio chiaro e non tecnico adatto a non programmatori
         
         Scrivi sempre in italiano grammaticalmente perfetto, con struttura chiara."""
         
