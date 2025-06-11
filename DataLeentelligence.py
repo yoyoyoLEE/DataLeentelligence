@@ -1,7 +1,7 @@
 """
 Data Explorer with LLM Integration
 Version: 1.0
-Author: Dr. Yong Lee
+Author: Dr. Yong Ha Lee
 Description: Interactive data analysis tool with LLM integration for automated insights and abstract generation
 Last Updated: June 2025
 """
@@ -254,11 +254,25 @@ Concentrati sulla sintesi di questi tre elementi in un abstract coerente."""
             "Content-Type": "application/json"
         }
 
+        # Enhanced system prompt for statistical analysis
+        system_prompt = """You are an AI assistant expert in data analysis and scientific writing. 
+        When statistical analysis is requested:
+        1. Identify the most appropriate statistical test based on the data characteristics
+        2. Generate executable Python code to perform the analysis
+        3. Explain the results and their interpretation
+        
+        Always respond in proper English with clear structure. Use formal but understandable language.""" if st.session_state.language == 'english' else """Sei un assistente AI esperto in analisi dati e redazione scientifica.
+        Quando viene richiesta un'analisi statistica:
+        1. Identifica il test statistico più appropriato
+        2. Genera codice Python eseguibile per l'analisi
+        3. Spiega i risultati e la loro interpretazione
+        
+        Scrivi sempre in italiano grammaticalmente perfetto, con struttura chiara."""
+        
         payload = {
             "model": "deepseek/deepseek-r1-0528-qwen3-8b:free",
             "messages": [
-                {"role": "system", "content": "You are an AI assistant expert in data analysis and scientific writing. Always respond in proper English with clear structure. Use formal but understandable language, avoiding unnecessary jargon." if st.session_state.language == 'english' else 
-                "Sei un assistente AI esperto in analisi dati e redazione scientifica in italiano corretto. Scrivi sempre in italiano grammaticalmente perfetto, con struttura chiara e senza traduzioni letterali dall'inglese. Usa un linguaggio formale ma comprensibile, evitando anglicismi non necessari."},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": context}
             ],
             "max_tokens": 3000,
