@@ -462,50 +462,50 @@ if uploaded_file is not None and not st.session_state.get('show_admin', False):
     if st.session_state.user_tier == 'tier1':
         # Limit tier1 to basic features
         if st.checkbox(LANGUAGES[st.session_state.language]['clean']):
-            df = df.drop_duplicates()
-            df = df.dropna(axis=0, how='all')
-            df = df.apply(lambda x: x.str.strip() if x.dtype == 'object' else x.astype(str).str.strip())
+            st.session_state.df = st.session_state.df.drop_duplicates()
+            st.session_state.df = st.session_state.df.dropna(axis=0, how='all')
+            st.session_state.df = st.session_state.df.apply(lambda x: x.str.strip() if x.dtype == 'object' else x.astype(str).str.strip())
             st.success("Pulizia completata")
-            st.dataframe(df.head())
+            st.dataframe(st.session_state.df.head())
 
         if st.checkbox(LANGUAGES[st.session_state.language]['edit']):
             st.markdown("Manual editing (use Excel for large volumes)" if st.session_state.language == 'english' else "Modifica manuale (usa Excel per grandi volumi)")
-            edited_df = st.experimental_data_editor(df, num_rows="dynamic")
-            df = edited_df
+            edited_df = st.experimental_data_editor(st.session_state.df, num_rows="dynamic")
+            st.session_state.df = edited_df
             st.success("Modifiche applicate")
-            st.dataframe(df.head())
+            st.dataframe(st.session_state.df.head())
 
     else:  # admin or tier2
         try:
             if uploaded_file.name.endswith(".csv"):
-                df = pd.read_csv(uploaded_file)
+                st.session_state.df = pd.read_csv(uploaded_file)
             else:
-                df = pd.read_excel(uploaded_file)
+                st.session_state.df = pd.read_excel(uploaded_file)
             
             # Handle data types more carefully
-            for col in df.columns:
+            for col in st.session_state.df.columns:
                 # Try to convert to numeric first
                 try:
-                    df[col] = pd.to_numeric(df[col], errors='ignore')
+                    st.session_state.df[col] = pd.to_numeric(st.session_state.df[col], errors='ignore')
                 except:
                     pass
                 
                 # Convert remaining non-numeric columns to string
-                if not np.issubdtype(df[col].dtype, np.number):
-                    df[col] = df[col].astype(str)
+                if not np.issubdtype(st.session_state.df[col].dtype, np.number):
+                    st.session_state.df[col] = st.session_state.df[col].astype(str)
                     
-            df = df.fillna('')
+            st.session_state.df = st.session_state.df.fillna('')
         except Exception as e:
             st.error(f"Errore nel caricamento del file: {e}")
             st.stop()
 
     st.success(LANGUAGES[st.session_state.language]['success'])
     # Show file preview
-    st.dataframe(df.head())
+    st.dataframe(st.session_state.df.head())
     
     st.subheader(LANGUAGES[st.session_state.language]['stats'])
     # Convert all columns to string for safe display
-    display_df = df.astype(str)
+    display_df = st.session_state.df.astype(str)
     st.dataframe(display_df.describe(include='all'))
 
     rows_to_analyze = st.slider(
@@ -520,7 +520,7 @@ if uploaded_file is not None and not st.session_state.get('show_admin', False):
         if st.session_state.language == 'english':
             abstract_prompt = f"""Please generate a complete scientific abstract structured with: Introduction, Methods, Results and Conclusion, based on:
 1. This dataset (first {rows_to_analyze} rows):
-{df.head(rows_to_analyze).to_csv(index=False)}
+{st.session_state.df.head(rows_to_analyze).to_csv(index=False)}
 
 2. The user's question: {user_question if 'user_question' in locals() else 'No specific question provided'}
 
@@ -530,7 +530,7 @@ Focus on synthesizing these three elements into a coherent abstract."""
         else:
             abstract_prompt = f"""Genera un abstract scientifico completo strutturato in: Introduzione, Metodi, Risultati e Conclusione, basato su:
 1. Questo dataset (prime {rows_to_analyze} righe):
-{df.head(rows_to_analyze).to_csv(index=False)}
+{st.session_state.df.head(rows_to_analyze).to_csv(index=False)}
 
 2. La domanda dell'utente: {user_question if 'user_question' in locals() else 'Nessuna domanda specifica'}
 
@@ -565,48 +565,48 @@ Concentrati sulla sintesi di questi tre elementi in un abstract coerente."""
         except Exception as e:
             st.error(f"Errore nella generazione dell'abstract: {e}")
     if st.checkbox(LANGUAGES[st.session_state.language]['clean']):
-        df = df.drop_duplicates()
-        df = df.dropna(axis=0, how='all')
+        st.session_state.df = st.session_state.df.drop_duplicates()
+        st.session_state.df = st.session_state.df.dropna(axis=0, how='all')
         # Ensure all columns are treated as strings
-        df = df.apply(lambda x: x.str.strip() if x.dtype == 'object' else x.astype(str).str.strip())
+        st.session_state.df = st.session_state.df.apply(lambda x: x.str.strip() if x.dtype == 'object' else x.astype(str).str.strip())
         st.success("Pulizia completata")
-        st.dataframe(df.head())
+        st.dataframe(st.session_state.df.head())
 
     if st.checkbox(LANGUAGES[st.session_state.language]['edit']):
         st.markdown("Manual editing (use Excel for large volumes)" if st.session_state.language == 'english' else "Modifica manuale (usa Excel per grandi volumi)")
-        edited_df = st.experimental_data_editor(df, num_rows="dynamic")
-        df = edited_df
+        edited_df = st.experimental_data_editor(st.session_state.df, num_rows="dynamic")
+        st.session_state.df = edited_df
         st.success("Modifiche applicate")
-        st.dataframe(df.head())
+        st.dataframe(st.session_state.df.head())
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         auto_path = os.path.join(SAVE_DIR, f"autosave_{timestamp}.csv")
-        df.to_csv(auto_path, index=False)
+        st.session_state.df.to_csv(auto_path, index=False)
         st.info(f"Modifiche salvate automaticamente in: {auto_path}")
 
     if st.checkbox(LANGUAGES[st.session_state.language]['advanced']):
         if st.button("Group by column" if st.session_state.language == 'english' else "Raggruppa per colonna"):
-            group_col = st.selectbox("Select column to group by" if st.session_state.language == 'english' else "Seleziona colonna per raggruppamento", df.columns)
-            st.dataframe(df.groupby(group_col).size().reset_index(name='Count' if st.session_state.language == 'english' else 'Conteggio'))
+            group_col = st.selectbox("Select column to group by" if st.session_state.language == 'english' else "Seleziona colonna per raggruppamento", st.session_state.df.columns)
+            st.dataframe(st.session_state.df.groupby(group_col).size().reset_index(name='Count' if st.session_state.language == 'english' else 'Conteggio'))
         if st.button("Filter rows" if st.session_state.language == 'english' else "Filtra righe"):
-            filter_col = st.selectbox("Select column to filter" if st.session_state.language == 'english' else "Seleziona colonna per filtrare", df.columns)
+            filter_col = st.selectbox("Select column to filter" if st.session_state.language == 'english' else "Seleziona colonna per filtrare", st.session_state.df.columns)
             filter_val = st.text_input("Value to search" if st.session_state.language == 'english' else "Valore da cercare")
             if filter_val:
-                st.dataframe(df[df[filter_col].astype(str).str.contains(filter_val, case=False)])
+                st.dataframe(st.session_state.df[st.session_state.df[filter_col].astype(str).str.contains(filter_val, case=False)])
         if st.button("Merge two columns" if st.session_state.language == 'english' else "Unisci due colonne"):
-            col1 = st.selectbox("Prima colonna", df.columns, key='col1')
-            col2 = st.selectbox("Seconda colonna", df.columns, key='col2')
+            col1 = st.selectbox("Prima colonna", st.session_state.df.columns, key='col1')
+            col2 = st.selectbox("Seconda colonna", st.session_state.df.columns, key='col2')
             sep = st.text_input("Separatore", value="_")
             new_col_name = st.text_input("Nome nuova colonna", value=f"{col1}_{col2}")
             if col1 and col2 and new_col_name:
-                df[new_col_name] = df[col1].astype(str) + sep + df[col2].astype(str)
+                st.session_state.df[new_col_name] = st.session_state.df[col1].astype(str) + sep + st.session_state.df[col2].astype(str)
                 st.success(f"Creata nuova colonna: {new_col_name}")
-                st.dataframe(df.head())
+                st.dataframe(st.session_state.df.head())
 
     user_question = st.text_area(LANGUAGES[st.session_state.language]['question'])
 
     if st.button(LANGUAGES[st.session_state.language]['send']) and user_question:
-        context = f"Ecco i primi {rows_to_analyze} record del dataset:\n{df.head(rows_to_analyze).to_csv(index=False)}\n\nDomanda: {user_question}"
+        context = f"Ecco i primi {rows_to_analyze} record del dataset:\n{st.session_state.df.head(rows_to_analyze).to_csv(index=False)}\n\nDomanda: {user_question}"
 
         headers = {
             "Authorization": f"Bearer {API_KEY}",
@@ -716,11 +716,11 @@ Concentrati sulla sintesi di questi tre elementi in un abstract coerente."""
                     st.download_button("Download CSV", buffer.getvalue(), file_name="cronologia_chat.csv", mime="text/csv")
 
         if st.checkbox(LANGUAGES[st.session_state.language]['visuals']):
-            numeric_cols = df.select_dtypes(include='number').columns.tolist()
+            numeric_cols = st.session_state.df.select_dtypes(include='number').columns.tolist()
             if numeric_cols:
                 col1 = st.selectbox("Scegli una variabile numerica per l'istogramma", numeric_cols)
                 fig, ax = plt.subplots()
-                sns.histplot(df[col1], bins=30, kde=True, ax=ax)
+                sns.histplot(st.session_state.df[col1], bins=30, kde=True, ax=ax)
                 st.pyplot(fig)
             else:
                 st.warning("Non ci sono colonne numeriche per il grafico")
@@ -728,11 +728,11 @@ Concentrati sulla sintesi di questi tre elementi in un abstract coerente."""
         if st.button(LANGUAGES[st.session_state.language]['download']):
             buffer = BytesIO()
             if uploaded_file.name.endswith(".csv"):
-                df.to_csv(buffer, index=False)
+                st.session_state.df.to_csv(buffer, index=False)
                 st.download_button("Download CSV", buffer.getvalue(), file_name="dati_modificati.csv", mime="text/csv")
             else:
                 with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                    df.to_excel(writer, index=False)
+                    st.session_state.df.to_excel(writer, index=False)
                 buffer.seek(0)
                 st.download_button("Download Excel", buffer.getvalue(), file_name="dati_modificati.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
