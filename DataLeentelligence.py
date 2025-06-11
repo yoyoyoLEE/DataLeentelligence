@@ -331,14 +331,14 @@ if st.session_state.user_tier in ['admin', 'tier2'] and 'tab2' in locals():
             # AI Data Quality Assessment
             with st.expander("Data Quality Report"):
                 if st.button("Generate Quality Report"):
-                    if 'df' not in locals() or df.empty:
+                    if 'df' not in globals() or df.empty:
                         st.error("No data available for analysis")
                         st.stop()
                     
                     try:
                         sample_data = df.head(50).to_csv(index=False)
-                        quality_prompt = """Analyze this dataset for quality issues:
-{}
+                        quality_prompt = f"""Analyze this dataset for quality issues:
+{sample_data}
 
 Provide a detailed report on:
 1. Missing values per column
@@ -347,9 +347,9 @@ Provide a detailed report on:
 4. Duplicate entries
 5. Any other data quality concerns
 
-Format as markdown with sections for each issue type.""".format(sample_data)
+Format as markdown with sections for each issue type."""
                     except Exception as e:
-                        st.error(f"Error preparing data for analysis: {e}")
+                        st.error(f"Error preparing data for analysis: {str(e)}")
                         st.stop()
                     
                     headers = {
