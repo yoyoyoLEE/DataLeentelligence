@@ -310,8 +310,9 @@ Concentrati sulla sintesi di questi tre elementi in un abstract coerente."""
             # Remove all code blocks and technical implementation details
             import re
             cleaned_response = re.sub(r'```.*?```', '', st.session_state.latest_answer, flags=re.DOTALL)  # Remove all code blocks
-            cleaned_response = re.sub(r'Here(.*?)code(.*?):', '', cleaned_response, flags=re.IGNORECASE)  # Remove code explanations
-            cleaned_response = re.sub(r'python(.*?)\n', '', cleaned_response, flags=re.IGNORECASE)  # Remove python mentions
+            cleaned_response = re.sub(r'(Here(.*?)code(.*?):|### (Python|Codice) (code|Python|per l\'analisi))', '', cleaned_response, flags=re.IGNORECASE)  # Remove code explanations and headers
+            cleaned_response = re.sub(r'(python|codice)(.*?)\n', '', cleaned_response, flags=re.IGNORECASE)  # Remove language mentions
+            cleaned_response = re.sub(r'#+\s*(Analysis|Analisi)\s*code\s*#+', '', cleaned_response, flags=re.IGNORECASE)  # Remove analysis code headers
             cleaned_response = cleaned_response.strip()
             st.text_area(LANGUAGES[st.session_state.language]['response'], value=cleaned_response, height=200)
 
