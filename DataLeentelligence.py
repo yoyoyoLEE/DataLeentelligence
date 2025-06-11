@@ -307,9 +307,12 @@ Concentrati sulla sintesi di questi tre elementi in un abstract coerente."""
 
         if "latest_answer" in st.session_state:
             st.markdown(f"### {LANGUAGES[st.session_state.language]['response']}")
-            # Remove Python code blocks from the response before displaying
+            # Remove all code blocks and technical implementation details
             import re
-            cleaned_response = re.sub(r'```python.*?```', '', st.session_state.latest_answer, flags=re.DOTALL)
+            cleaned_response = re.sub(r'```.*?```', '', st.session_state.latest_answer, flags=re.DOTALL)  # Remove all code blocks
+            cleaned_response = re.sub(r'Here(.*?)code(.*?):', '', cleaned_response, flags=re.IGNORECASE)  # Remove code explanations
+            cleaned_response = re.sub(r'python(.*?)\n', '', cleaned_response, flags=re.IGNORECASE)  # Remove python mentions
+            cleaned_response = cleaned_response.strip()
             st.text_area(LANGUAGES[st.session_state.language]['response'], value=cleaned_response, height=200)
 
         col1, col2 = st.columns(2)
