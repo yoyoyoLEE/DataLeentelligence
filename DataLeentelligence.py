@@ -17,14 +17,7 @@ from io import BytesIO
 from datetime import datetime
 import os
 
-# Predefined user credentials
-VALID_USERS = {
-    "admin": "yonghalee",
-    "colecisti": "difficile",
-    "psm": "bariatrica",
-    "marta": "bonaldi",
-    "giovanni": "cesana"
-}
+from utilities import hash_password, verify_password, get_db_connection, log_activity, get_user_tier
 
 # Login function
 def login():
@@ -33,12 +26,31 @@ def login():
     password = st.text_input("Password", type="password")
     
     if st.button("Login"):
-        if username in VALID_USERS and VALID_USERS[username] == password:
-            st.session_state.logged_in = True
-            st.session_state.username = username
-            st.rerun()
-        else:
-            st.error("Invalid username or password")
+        conn = get_db_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, password_hash, tier FROM users WHERE username = ?", (username,))
+            user = cursor.fetchone()
+            
+            if user and verify_password(password, user[1]):
+                st.session_state.logged_in = True
+                st.session_state.username = username
+                st.session_state.user_id = user[0]
+                st.session_state.user_tier = user[2]
+                
+                # Update last login
+                conn.execute("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?", (user[0],))
+                conn.commit()
+                
+                # Log login activity
+                log_activity(user[0], "login")
+                
+                st.rerun()
+            else:
+                st.error("Invalid username or password")
+                log_activity(None, "failed_login", f"username: {username}")
+        finally:
+            conn.close()
 
 # Check login state
 if "logged_in" not in st.session_state:
@@ -98,8 +110,8 @@ API_KEY = st.secrets["OPENROUTER_API_KEY"]
 
 st.set_page_config(page_title="Data Explorer with LLM")
 
-# Language selector
-col1, col2 = st.columns([4,1])
+# Admin and language controls
+col1, col2, col3 = st.columns([3,1,1])
 with col1:
     st.title(LANGUAGES[st.session_state.language]['title'])
 with col2:
@@ -107,6 +119,115 @@ with col2:
     if lang != st.session_state.language:
         st.session_state.language = lang
         st.rerun()
+with col3:
+    if st.session_state.user_tier == 'admin':
+        if st.button("Admin Panel"):
+            st.session_state.show_admin = not st.session_state.get('show_admin', False)
+            st.rerun()
+
+# Admin Panel
+if st.session_state.get('show_admin', False) and st.session_state.user_tier == 'admin':
+    st.sidebar.title("Admin Panel")
+    
+    admin_tab = st.sidebar.radio("Menu", ["User Management", "Activity Logs", "System Settings"])
+    
+    if admin_tab == "User Management":
+        st.header("User Management")
+        
+        # Add new user
+        with st.expander("Add New User"):
+            new_username = st.text_input("Username")
+            new_password = st.text_input("Password", type="password")
+            new_tier = st.selectbox("Tier", ["admin", "tier2", "tier1"])
+            if st.button("Add User"):
+                conn = get_db_connection()
+                try:
+                    conn.execute(
+                        "INSERT INTO users (username, password_hash, tier) VALUES (?, ?, ?)",
+                        (new_username, hash_password(new_password), new_tier)
+                    )
+                    conn.commit()
+                    st.success(f"User {new_username} added successfully")
+                    log_activity(st.session_state.user_id, "user_add", f"added user: {new_username}")
+                except sqlite3.IntegrityError:
+                    st.error("Username already exists")
+                finally:
+                    conn.close()
+        
+        # User list and management
+        st.subheader("Existing Users")
+        conn = get_db_connection()
+        users = conn.execute("SELECT id, username, tier, created_at, last_login FROM users").fetchall()
+        conn.close()
+        
+        for user in users:
+            with st.expander(f"{user[1]} ({user[2]})"):
+                st.write(f"Created: {user[3]}")
+                st.write(f"Last login: {user[4] or 'Never'}")
+                
+                new_tier = st.selectbox(
+                    "Change Tier",
+                    ["admin", "tier2", "tier1"],
+                    index=["admin", "tier2", "tier1"].index(user[2]),
+                    key=f"tier_{user[0]}"
+                )
+                
+                if st.button("Update", key=f"update_{user[0]}"):
+                    conn = get_db_connection()
+                    conn.execute(
+                        "UPDATE users SET tier = ? WHERE id = ?",
+                        (new_tier, user[0])
+                    )
+                    conn.commit()
+                    conn.close()
+                    st.success("User updated")
+                    log_activity(st.session_state.user_id, "user_update", f"updated user {user[1]} to tier {new_tier}")
+                
+                if st.button("Delete", key=f"delete_{user[0]}"):
+                    conn = get_db_connection()
+                    conn.execute("DELETE FROM users WHERE id = ?", (user[0],))
+                    conn.commit()
+                    conn.close()
+                    st.success("User deleted")
+                    log_activity(st.session_state.user_id, "user_delete", f"deleted user {user[1]}")
+    
+    elif admin_tab == "Activity Logs":
+        st.header("Activity Logs")
+        
+        # Filter options
+        col1, col2 = st.columns(2)
+        with col1:
+            user_filter = st.selectbox("Filter by user", ["All"] + [u[1] for u in users])
+        with col2:
+            action_filter = st.selectbox("Filter by action", ["All", "login", "failed_login", "user_add", "user_update", "user_delete"])
+        
+        # Query logs with filters
+        conn = get_db_connection()
+        query = "SELECT l.timestamp, u.username, l.action_type, l.details FROM activity_logs l LEFT JOIN users u ON l.user_id = u.id"
+        params = []
+        
+        if user_filter != "All":
+            query += " WHERE u.username = ?"
+            params.append(user_filter)
+            if action_filter != "All":
+                query += " AND l.action_type = ?"
+                params.append(action_filter)
+        elif action_filter != "All":
+            query += " WHERE l.action_type = ?"
+            params.append(action_filter)
+            
+        query += " ORDER BY l.timestamp DESC LIMIT 100"
+        
+        logs = conn.execute(query, params).fetchall()
+        conn.close()
+        
+        # Display logs
+        for log in logs:
+            st.write(f"{log[0]} | {log[1]} | {log[2]} | {log[3]}")
+    
+    elif admin_tab == "System Settings":
+        st.header("System Settings")
+        st.write("Configuration options coming soon")
 
 SAVE_DIR = "./modifiche_auto_salvate"
 os.makedirs(SAVE_DIR, exist_ok=True)
@@ -123,30 +244,226 @@ if username not in st.session_state.user_chat_histories:
 if "trigger_llm" not in st.session_state:
     st.session_state.trigger_llm = False
 
-uploaded_file = st.file_uploader(LANGUAGES[st.session_state.language]['upload'], type=["csv", "xlsx"])
+# Main tabs
+if st.session_state.user_tier in ['admin', 'tier2']:
+    tab1, tab2, tab3 = st.tabs(["Data Analysis", "AI Data Cleaning", "Data Retrieval"])
+elif st.session_state.user_tier == 'tier1':
+    tab1 = st.tabs(["Data Analysis"])[0]
+else:
+    tab1 = st.tabs(["Data Analysis"])[0]
 
-if uploaded_file is not None:
-    try:
-        if uploaded_file.name.endswith(".csv"):
-            df = pd.read_csv(uploaded_file)
-        else:
-            df = pd.read_excel(uploaded_file)
-        # Handle data types more carefully
-        for col in df.columns:
-            # Try to convert to numeric first
-            try:
-                df[col] = pd.to_numeric(df[col], errors='ignore')
-            except:
-                pass
+# Data Retrieval Tab
+if st.session_state.user_tier in ['admin', 'tier2'] and 'tab3' in locals():
+    with tab3:
+        st.header("Data Retrieval from Documents")
+        
+        # File upload
+        uploaded_docs = st.file_uploader(
+            "Upload PDF, JPG, or other documents", 
+            type=["pdf", "jpg", "jpeg", "png", "docx"],
+            accept_multiple_files=True
+        )
+        
+        if uploaded_docs:
+            st.success(f"{len(uploaded_docs)} document(s) uploaded")
             
-            # Convert remaining non-numeric columns to string
-            if not np.issubdtype(df[col].dtype, np.number):
-                df[col] = df[col].astype(str)
+            # Document processing
+            with st.expander("Document Processing"):
+                if st.button("Extract Data from Documents"):
+                    st.session_state.extracted_data = []
+                    
+                    for doc in uploaded_docs:
+                        # Placeholder for actual document processing
+                        # In a real implementation, you would use:
+                        # - PyPDF2 for PDFs
+                        # - pytesseract for images
+                        # - python-docx for Word docs
+                        
+                        extracted = {
+                            "filename": doc.name,
+                            "content": f"Extracted text from {doc.name} (placeholder)",
+                            "tables": []
+                        }
+                        st.session_state.extracted_data.append(extracted)
+                    
+                    st.success("Data extraction complete")
+                    log_activity(st.session_state.user_id, "data_extraction", f"Extracted data from {len(uploaded_docs)} documents")
+            
+            # Preview and confirmation
+            if 'extracted_data' in st.session_state:
+                st.subheader("Extracted Data Preview")
                 
-        df = df.fillna('')
-    except Exception as e:
-        st.error(f"Errore nel caricamento del file: {e}")
-        st.stop()
+                for doc_data in st.session_state.extracted_data:
+                    with st.expander(doc_data['filename']):
+                        st.write(doc_data['content'])
+                        
+                        if doc_data['tables']:
+                            st.write("Extracted Tables:")
+                            for table in doc_data['tables']:
+                                st.dataframe(table)
+                
+                # Data import options
+                st.subheader("Import Options")
+                import_action = st.radio(
+                    "Select import action",
+                    ["Create new dataset", "Append to current dataset"]
+                )
+                
+                if st.button("Confirm Import"):
+                    if import_action == "Create new dataset":
+                        # Create new DataFrame from extracted data
+                        st.session_state.df = pd.DataFrame()  # Replace with actual extracted data
+                        st.success("New dataset created from documents")
+                    else:
+                        # Append to existing DataFrame
+                        st.warning("Append functionality not yet implemented")
+                    
+                    log_activity(st.session_state.user_id, "data_import", f"Imported data from documents ({import_action})")
+
+with tab1:
+    uploaded_file = st.file_uploader(LANGUAGES[st.session_state.language]['upload'], type=["csv", "xlsx"])
+
+if st.session_state.user_tier in ['admin', 'tier2'] and 'tab2' in locals():
+    with tab2:
+        if uploaded_file is not None:
+            st.header("AI-Assisted Data Cleaning")
+            
+            # AI Data Quality Assessment
+            with st.expander("Data Quality Report"):
+                if st.button("Generate Quality Report"):
+                    quality_prompt = f"""Analyze this dataset for quality issues:
+{df.head(50).to_csv(index=False)}
+
+Provide a detailed report on:
+1. Missing values per column
+2. Data type inconsistencies
+3. Potential outliers
+4. Duplicate entries
+5. Any other data quality concerns
+
+Format as markdown with sections for each issue type."""
+                    
+                    headers = {
+                        "Authorization": f"Bearer {API_KEY}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": "deepseek/deepseek-r1-0528-qwen3-8b:free",
+                        "messages": [
+                            {"role": "system", "content": "You are a data quality expert. Provide clear, actionable insights about data quality issues in the provided dataset."},
+                            {"role": "user", "content": quality_prompt}
+                        ],
+                        "max_tokens": 2000,
+                        "temperature": 0.3
+                    }
+                    
+                    try:
+                        response = requests.post(API_URL, headers=headers, json=payload)
+                        response.raise_for_status()
+                        result = response.json()
+                        quality_report = result["choices"][0]["message"]["content"]
+                        st.markdown(quality_report)
+                        log_activity(st.session_state.user_id, "quality_report", "Generated data quality report")
+                    except Exception as e:
+                        st.error(f"Error generating quality report: {e}")
+            
+            # AI Suggested Cleaning
+            with st.expander("Suggested Cleaning Operations"):
+                if st.button("Get Cleaning Suggestions"):
+                    cleaning_prompt = f"""Suggest cleaning operations for this dataset:
+{df.head(50).to_csv(index=False)}
+
+For each suggested operation, include:
+1. Description of the issue
+2. Recommended solution
+3. Expected impact
+4. Python/pandas code to implement (if applicable)
+
+Format as markdown with clear sections."""
+                    
+                    payload["messages"] = [
+                        {"role": "system", "content": "You are a data cleaning expert. Provide clear, actionable cleaning recommendations for the provided dataset."},
+                        {"role": "user", "content": cleaning_prompt}
+                    ]
+                    
+                    try:
+                        response = requests.post(API_URL, headers=headers, json=payload)
+                        response.raise_for_status()
+                        result = response.json()
+                        cleaning_suggestions = result["choices"][0]["message"]["content"]
+                        st.markdown(cleaning_suggestions)
+                        log_activity(st.session_state.user_id, "cleaning_suggestions", "Generated cleaning suggestions")
+                    except Exception as e:
+                        st.error(f"Error generating cleaning suggestions: {e}")
+            
+            # Interactive Cleaning
+            with st.expander("Interactive Cleaning"):
+                st.write("Perform specific cleaning operations:")
+                
+                if st.button("Auto-clean Common Issues"):
+                    # Basic cleaning operations
+                    df_clean = df.copy()
+                    df_clean = df_clean.drop_duplicates()
+                    df_clean = df_clean.dropna(how='all')
+                    for col in df_clean.columns:
+                        if df_clean[col].dtype == 'object':
+                            df_clean[col] = df_clean[col].str.strip()
+                    
+                    st.session_state.df_clean_preview = df_clean
+                    st.success("Basic cleaning applied. Preview below:")
+                    st.dataframe(df_clean.head())
+                    log_activity(st.session_state.user_id, "basic_cleaning", "Applied basic cleaning operations")
+                
+                if 'df_clean_preview' in st.session_state:
+                    st.subheader("Cleaning Preview")
+                    st.dataframe(st.session_state.df_clean_preview.head())
+                    
+                    if st.button("Apply Cleaning"):
+                        df = st.session_state.df_clean_preview
+                        st.success("Cleaning applied to dataset!")
+                        log_activity(st.session_state.user_id, "cleaning_applied", "Applied cleaning operations")
+
+if uploaded_file is not None and not st.session_state.get('show_admin', False):
+    # Tier-based feature access
+    if st.session_state.user_tier == 'tier1':
+        # Limit tier1 to basic features
+        if st.checkbox(LANGUAGES[st.session_state.language]['clean']):
+            df = df.drop_duplicates()
+            df = df.dropna(axis=0, how='all')
+            df = df.apply(lambda x: x.str.strip() if x.dtype == 'object' else x.astype(str).str.strip())
+            st.success("Pulizia completata")
+            st.dataframe(df.head())
+
+        if st.checkbox(LANGUAGES[st.session_state.language]['edit']):
+            st.markdown("Manual editing (use Excel for large volumes)" if st.session_state.language == 'english' else "Modifica manuale (usa Excel per grandi volumi)")
+            edited_df = st.experimental_data_editor(df, num_rows="dynamic")
+            df = edited_df
+            st.success("Modifiche applicate")
+            st.dataframe(df.head())
+
+    else:  # admin or tier2
+        try:
+            if uploaded_file.name.endswith(".csv"):
+                df = pd.read_csv(uploaded_file)
+            else:
+                df = pd.read_excel(uploaded_file)
+            
+            # Handle data types more carefully
+            for col in df.columns:
+                # Try to convert to numeric first
+                try:
+                    df[col] = pd.to_numeric(df[col], errors='ignore')
+                except:
+                    pass
+                
+                # Convert remaining non-numeric columns to string
+                if not np.issubdtype(df[col].dtype, np.number):
+                    df[col] = df[col].astype(str)
+                    
+            df = df.fillna('')
+        except Exception as e:
+            st.error(f"Errore nel caricamento del file: {e}")
+            st.stop()
 
     st.success(LANGUAGES[st.session_state.language]['success'])
     # Show file preview
