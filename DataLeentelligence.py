@@ -322,21 +322,46 @@ if st.session_state.user_tier in ['admin', 'tier2'] and 'tab3' in locals():
 
 with tab1:
     uploaded_file = st.file_uploader(LANGUAGES[st.session_state.language]['upload'], type=["csv", "xlsx"])
+    if uploaded_file is not None:
+        try:
+            if uploaded_file.name.endswith(".csv"):
+                st.session_state.df = pd.read_csv(uploaded_file)
+            else:
+                st.session_state.df = pd.read_excel(uploaded_file)
+            
+            # Handle data types more carefully
+            for col in st.session_state.df.columns:
+                # Try to convert to numeric first
+                try:
+                    st.session_state.df[col] = pd.to_numeric(st.session_state.df[col], errors='ignore')
+                except:
+                    pass
+                
+                # Convert remaining non-numeric columns to string
+                if not np.issubdtype(st.session_state.df[col].dtype, np.number):
+                    st.session_state.df[col] = st.session_state.df[col].astype(str)
+                    
+            st.session_state.df = st.session_state.df.fillna('')
+            st.success(LANGUAGES[st.session_state.language]['success'])
+            st.dataframe(st.session_state.df.head())
+        except Exception as e:
+            st.error(f"Errore nel caricamento del file: {e}")
+            st.stop()
 
 if st.session_state.user_tier in ['admin', 'tier2'] and 'tab2' in locals():
     with tab2:
-        if uploaded_file is not None:
+        if 'df' in st.session_state:
             st.header("AI-Assisted Data Cleaning")
             
             # AI Data Quality Assessment
             with st.expander("Data Quality Report"):
                 if st.button("Generate Quality Report"):
-                    if 'df' not in globals() or df.empty:
+                    if 'df' not in st.session_state or st.session_state.df.empty:
                         st.error("No data available for analysis")
                         st.stop()
                     
                     try:
-                        sample_data = df.head(50).to_csv(index=False)
+                        sample_data = st.session_state.df.head(50).to_csv(index=False)
                         quality_prompt = f"""Analyze this dataset for quality issues:
 {sample_data}
 
@@ -380,7 +405,7 @@ Format as markdown with sections for each issue type."""
             with st.expander("Suggested Cleaning Operations"):
                 if st.button("Get Cleaning Suggestions"):
                     cleaning_prompt = f"""Suggest cleaning operations for this dataset:
-{df.head(50).to_csv(index=False)}
+{st.session_state.df.head(50).to_csv(index=False)}
 
 For each suggested operation, include:
 1. Description of the issue
@@ -411,7 +436,7 @@ Format as markdown with clear sections."""
                 
                 if st.button("Auto-clean Common Issues"):
                     # Basic cleaning operations
-                    df_clean = df.copy()
+                    df_clean = st.session_state.df.copy()
                     df_clean = df_clean.drop_duplicates()
                     df_clean = df_clean.dropna(how='all')
                     for col in df_clean.columns:
@@ -428,7 +453,7 @@ Format as markdown with clear sections."""
                     st.dataframe(st.session_state.df_clean_preview.head())
                     
                     if st.button("Apply Cleaning"):
-                        df = st.session_state.df_clean_preview
+                        st.session_state.df = st.session_state.df_clean_preview
                         st.success("Cleaning applied to dataset!")
                         log_activity(st.session_state.user_id, "cleaning_applied", "Applied cleaning operations")
 
