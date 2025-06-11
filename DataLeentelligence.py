@@ -21,7 +21,9 @@ import os
 VALID_USERS = {
     "admin": "yonghalee",
     "colecisti": "difficile",
-    "psm": "bariatrica"
+    "psm": "bariatrica",
+    "marta": "bonaldi",
+    "giovanni": "cesana"
 }
 
 # Login function
@@ -109,8 +111,14 @@ with col2:
 SAVE_DIR = "./modifiche_auto_salvate"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+# Initialize user-specific chat history if not exists
+if "user_chat_histories" not in st.session_state:
+    st.session_state.user_chat_histories = {}
+
+# Get or create chat history for current user
+username = st.session_state.get('username', 'default')
+if username not in st.session_state.user_chat_histories:
+    st.session_state.user_chat_histories[username] = []
 
 if "trigger_llm" not in st.session_state:
     st.session_state.trigger_llm = False
@@ -308,7 +316,7 @@ Concentrati sulla sintesi di questi tre elementi in un abstract coerente."""
             response.raise_for_status()
             result = response.json()
             answer = result["choices"][0]["message"]["content"]
-            st.session_state.chat_history.append((user_question, answer))
+            st.session_state.user_chat_histories[username].append((user_question, answer))
             st.session_state.latest_answer = answer
         except Exception as e:
             st.session_state.latest_answer = f"Errore durante la chiamata all'API: {e}"
@@ -338,22 +346,22 @@ Concentrati sulla sintesi di questi tre elementi in un abstract coerente."""
             doc_buffer.seek(0)
             st.download_button("Esporta come DOCX", doc_buffer, file_name="risposta_ai.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
-        if st.session_state.chat_history:
+        if st.session_state.user_chat_histories[username]:
             st.markdown(f"### {LANGUAGES[st.session_state.language]['history']}")
-            for i, (q, a) in enumerate(reversed(st.session_state.chat_history)):
+            for i, (q, a) in enumerate(reversed(st.session_state.user_chat_histories[username])):
                 st.markdown(f"**Q{i+1}:** {q}")
                 st.text_area(f"Risposta {i+1}", value=a, height=200, key=f"ans_{i}")
 
             col1, col2 = st.columns([1, 1])
             with col1:
                 if st.button(LANGUAGES[st.session_state.language]['clear']):
-                    st.session_state.chat_history = []
+                    st.session_state.user_chat_histories[username] = []
                     st.session_state.latest_answer = ""
                     st.rerun()
             with col2:
                 if st.button(LANGUAGES[st.session_state.language]['export']):
                     buffer = BytesIO()
-                    pd.DataFrame(st.session_state.chat_history, columns=["Domanda", "Risposta"]).to_csv(buffer, index=False)
+                    pd.DataFrame(st.session_state.user_chat_histories[username], columns=["Domanda", "Risposta"]).to_csv(buffer, index=False)
                     st.download_button("Download CSV", buffer.getvalue(), file_name="cronologia_chat.csv", mime="text/csv")
 
         if st.checkbox(LANGUAGES[st.session_state.language]['visuals']):
