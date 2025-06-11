@@ -289,9 +289,12 @@ Concentrati sulla sintesi di questi tre elementi in un abstract coerente."""
         except Exception as e:
             st.session_state.latest_answer = f"Errore durante la chiamata all'API: {e}"
 
-    if "latest_answer" in st.session_state:
-        st.markdown(f"### {LANGUAGES[st.session_state.language]['response']}")
-        st.text_area(LANGUAGES[st.session_state.language]['response'], value=st.session_state.latest_answer, height=200)
+        if "latest_answer" in st.session_state:
+            st.markdown(f"### {LANGUAGES[st.session_state.language]['response']}")
+            # Remove Python code blocks from the response before displaying
+            import re
+            cleaned_response = re.sub(r'```python.*?```', '', st.session_state.latest_answer, flags=re.DOTALL)
+            st.text_area(LANGUAGES[st.session_state.language]['response'], value=cleaned_response, height=200)
 
         col1, col2 = st.columns(2)
         with col1:
