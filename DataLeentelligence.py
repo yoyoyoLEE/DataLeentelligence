@@ -652,13 +652,21 @@ Concentrati sulla sintesi di questi tre elementi in un abstract coerente."""
         
         Scrivi sempre in italiano grammaticalmente perfetto, con struttura chiara."""
         
+        # Set token limits based on user tier
+        if st.session_state.user_tier == 'admin':
+            max_tokens = 8000  # Effectively unlimited for most responses
+        elif st.session_state.user_tier == 'tier2':
+            max_tokens = 4000
+        else:  # tier1
+            max_tokens = 2000
+
         payload = {
             "model": "deepseek/deepseek-r1-0528-qwen3-8b:free",
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": context}
             ],
-            "max_tokens": 3000,
+            "max_tokens": max_tokens,
             "temperature": 0.7  # More focused responses
         }
 
