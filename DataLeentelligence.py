@@ -606,7 +606,21 @@ Concentrati sulla sintesi di questi tre elementi in un abstract coerente."""
     user_question = st.text_area(LANGUAGES[st.session_state.language]['question'])
 
     if st.button(LANGUAGES[st.session_state.language]['send']) and user_question:
-        context = f"Ecco i primi {rows_to_analyze} record del dataset:\n{st.session_state.df.head(rows_to_analyze).to_csv(index=False)}\n\nDomanda: {user_question}"
+        # Smart data sampling for large datasets
+        if rows_to_analyze > 200:
+            st.warning(f"Attenzione: Stai analizzando {rows_to_analyze} righe. Per dataset molto grandi, potrebbe essere necessario più tempo." if st.session_state.language == 'italian' else f"Warning: Analyzing {rows_to_analyze} rows. Large datasets may take longer to process.")
+        
+        # Prepare data sample with intelligent column selection
+        df_sample = st.session_state.df.head(rows_to_analyze)
+        
+        # If dataset is very large, include column info but sample data
+        if rows_to_analyze > 300:
+            data_summary = f"Dataset info: {len(st.session_state.df)} total rows, {len(st.session_state.df.columns)} columns\n"
+            data_summary += f"Column names: {', '.join(st.session_state.df.columns.tolist())}\n\n"
+            data_summary += f"Sample data (first 300 rows):\n{st.session_state.df.head(300).to_csv(index=False)}"
+            context = f"{data_summary}\n\nDomanda: {user_question}"
+        else:
+            context = f"Ecco i primi {rows_to_analyze} record del dataset:\n{df_sample.to_csv(index=False)}\n\nDomanda: {user_question}"
 
         headers = {
             "Authorization": f"Bearer {API_KEY}",
@@ -674,11 +688,29 @@ Concentrati sulla sintesi di questi tre elementi in un abstract coerente."""
             response = requests.post(API_URL, headers=headers, json=payload)
             response.raise_for_status()
             result = response.json()
-            answer = result["choices"][0]["message"]["content"]
-            st.session_state.user_chat_histories[username].append((user_question, answer))
-            st.session_state.latest_answer = answer
+            
+            # Better error handling for API response structure
+            if "choices" in result and len(result["choices"]) > 0:
+                if "message" in result["choices"][0] and "content" in result["choices"][0]["message"]:
+                    answer = result["choices"][0]["message"]["content"]
+                    st.session_state.user_chat_histories[username].append((user_question, answer))
+                    st.session_state.latest_answer = answer
+                else:
+                    error_msg = f"Risposta API malformata - manca il contenuto del messaggio. Risposta: {result}"
+                    st.error(error_msg)
+                    st.session_state.latest_answer = error_msg
+            else:
+                error_msg = f"Risposta API malformata - manca 'choices'. Risposta completa: {result}"
+                st.error(error_msg)
+                st.session_state.latest_answer = error_msg
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Errore di connessione all'API: {str(e)}"
+            st.error(error_msg)
+            st.session_state.latest_answer = error_msg
         except Exception as e:
-            st.session_state.latest_answer = f"Errore durante la chiamata all'API: {e}"
+            error_msg = f"Errore durante la chiamata all'API: {str(e)}"
+            st.error(error_msg)
+            st.session_state.latest_answer = error_msg
 
         if "latest_answer" in st.session_state:
             st.markdown(f"### {LANGUAGES[st.session_state.language]['response']}")
